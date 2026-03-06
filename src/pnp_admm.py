@@ -1,13 +1,12 @@
 """
-Modül 4: PnP-ADMM Optimizasyonu
+Module 4: PnP-ADMM Optimization
 ===============================
-Plug-and-Play Alternating Direction Method of Multipliers (PnP-ADMM)
-algoritması, veriye uygunluk (data fidelity) adımı ile 
-herhangi bir bağımsız gürültü azaltıcıyı (denoiser, örn: SCSA)
-birleştirerek global bir optimizasyon sunar.
+The Plug-and-Play Alternating Direction Method of Multipliers (PnP-ADMM)
+algorithm provides a global optimization framework by combining a 
+data fidelity step with any independent denoiser (e.g., SCSA).
 
-Yazar: DeepTech Pipeline
-Tarih: 2026
+Author: FizyGame
+Date: 2026
 """
 
 from __future__ import annotations
@@ -21,15 +20,15 @@ logger = logging.getLogger("pnp_admm")
 
 class PnPADMM:
     """
-    Plug-and-Play ADMM Çerçevesi.
+    Plug-and-Play ADMM Framework.
     
     Attributes:
-        denoiser (Callable): Sinyal (np.ndarray) alıp filtrelenmiş sinyal döndüren
-                             çalıştırılabilir fonksiyon (Örn: scsa.fit_transform).
-        rho (float): ADMM ceza parametresi (Lagrangian multiplier).
-        max_iter (int): Maksimum iterasyon sayısı.
-        tol (float): Yakınsama toleransı (primal ve dual residual için limit).
-        adaptive_rho (bool): İterasyonlar arası dinamik rho güncellemeleri yapılsın mı?
+        denoiser (Callable): Executable function that takes a signal (np.ndarray)
+                             and returns a filtered signal (e.g., scsa.fit_transform).
+        rho (float): ADMM penalty parameter (Lagrangian multiplier).
+        max_iter (int): Maximum number of iterations.
+        tol (float): Convergence tolerance (limits for primal and dual residuals).
+        adaptive_rho (bool): Whether to perform dynamic rho updates between iterations.
     """
 
     def __init__(
@@ -46,7 +45,7 @@ class PnPADMM:
         self.tol = tol
         self.adaptive_rho = adaptive_rho
         
-        # Loglama için takip geçmişi
+        # Tracking history for logging
         self.history_: dict[str, list[float]] = {
             "primal_res": [],
             "dual_res": [],
@@ -61,38 +60,39 @@ class PnPADMM:
         rho: float
     ) -> np.ndarray:
         """
-        Data Fidelity (Veri Uygunluğu) Adımı (x-guncellemesi).
-        Varsayım: H = I (Birim Matris), yani bozulma sadece gürültü/Additive Noise.
+        Data Fidelity Step (x-update).
+        Assumption: H = I (Identity Matrix), meaning the degradation is purely 
+        Additive White Gaussian Noise (AWGN).
         
-        Formül (H=I için Proximal Operator):
+        Formula (Proximal Operator for H=I):
             x^{k+1} = (y + rho * (z^k - u^k)) / (1 + rho)
             
         Args:
-            y (np.ndarray): Orijinal gürültülü gözlem sinyali.
-            z (np.ndarray): ADMM z değişkeni (denoised sinyal).
-            u (np.ndarray): ADMM dual değişkeni (Lagrangian çarpanı).
-            rho (float): Güncel ceza parametresi.
+            y (np.ndarray): Original noisy observation signal.
+            z (np.ndarray): ADMM z variable (denoised signal).
+            u (np.ndarray): ADMM dual variable (Lagrangian multiplier).
+            rho (float): Current penalty parameter.
             
         Returns:
-            np.ndarray: x^{k+1} güncel sinyal
+            np.ndarray: Evaluated signal x^{k+1}
         """
         return (y + rho * (z - u)) / (1.0 + rho)
 
     def _denoising_step(self, x: np.ndarray, u: np.ndarray) -> np.ndarray:
         """
-        Plug-in Denoising Adımı (z-güncellemesi).
+        Plug-in Denoising Step (z-update).
         
-        Sinyal hedefi: x^{k+1} + u^k
+        Signal target: x^{k+1} + u^k
         
         Args:
-            x (np.ndarray): Güncellenmiş x değişkeni.
-            u (np.ndarray): Dual değişken.
+            x (np.ndarray): Updated x variable.
+            u (np.ndarray): Dual variable.
             
         Returns:
-            np.ndarray: Denoiser'dan geçen z^{k+1}
+            np.ndarray: Passed through the denoiser: z^{k+1}
         """
         noisy_target = x + u
-        # Plug-and-Play büyüsü: Matematiksel formülasyon yerine dış algoritma çağrısı
+        # Plug-and-Play magic: External algorithm call instead of a purely mathematical formulation
         return self.denoiser(noisy_target)
 
     def _dual_update(
@@ -102,9 +102,9 @@ class PnPADMM:
         z: np.ndarray
     ) -> np.ndarray:
         """
-        Lagrangian Multiplier (Dual Değişken) Güncellemesi.
+        Lagrangian Multiplier (Dual Variable) Update.
         
-        Formül:
+        Formula:
             u^{k+1} = u^k + (x^{k+1} - z^{k+1})
         """
         return u + (x - z)
@@ -118,8 +118,8 @@ class PnPADMM:
         tau: float = 2.0
     ) -> float:
         """
-        Adaptif Rho Güncellemesi (Residual Dengeleme).
-        ADMM'in çok yavaş veya çok hızlı yakınsamasını önler.
+        Adaptive Rho Update (Residual Balancing).
+        Prevents ADMM from converging too slowly or diverging.
         """
         if primal_res > mu * dual_res:
             return rho * tau
@@ -129,15 +129,15 @@ class PnPADMM:
 
     def run(self, y: np.ndarray) -> np.ndarray:
         """
-        Tam PnP-ADMM döngüsünü çalıştırır.
+        Executes the full PnP-ADMM loop.
         
         Args:
-            y (np.ndarray): Optimize edilecek 1D gürültülü sinyal.
+            y (np.ndarray): 1D noisy signal to be optimized.
             
         Returns:
-            np.ndarray: Optimize edilmiş/temizlenmiş z sinyali.
+            np.ndarray: Optimized/cleaned z signal.
         """
-        assert isinstance(y, np.ndarray) and y.ndim == 1, "Sinyal 1D numpy array olmalıdır."
+        assert isinstance(y, np.ndarray) and y.ndim == 1, "Signal must be a 1D numpy array."
         
         n = len(y)
         x = y.copy()
@@ -145,43 +145,43 @@ class PnPADMM:
         u = np.zeros(n, dtype=np.float64)
         rho = self.rho
         
-        # Geçmişi sıfırla
+        # Reset history
         self.history_ = {"primal_res": [], "dual_res": [], "rho": []}
         
-        logger.info("PnP-ADMM Optimizasyonu Başlatılıyor (Max Iter: %d)", self.max_iter)
+        logger.info("Initializing PnP-ADMM Optimization (Max Iter: %d)", self.max_iter)
         
         for k in range(self.max_iter):
             z_old = z.copy()
             
-            # 1. x Güncellemesi (Data Fidelity)
+            # 1. x Update (Data Fidelity)
             x = self._data_fidelity_step(y, z, u, rho)
             
-            # 2. z Güncellemesi (Denoising by Plug-in)
+            # 2. z Update (Denoising by Plug-in)
             z = self._denoising_step(x, u)
             
-            # 3. u Güncellemesi (Dual)
+            # 3. u Update (Dual)
             u = self._dual_update(u, x, z)
             
-            # Hatayı hesapla (Residuals)
+            # Calculate Errors (Residuals)
             primal_residual = np.linalg.norm(x - z)
             dual_residual = np.linalg.norm(rho * (z - z_old))
             
-            # Geçmişi kaydet
+            # Save history
             self.history_["primal_res"].append(primal_residual)
             self.history_["dual_res"].append(dual_residual)
             self.history_["rho"].append(rho)
             
-            # Erken durma (Early Convergence)
+            # Early Convergence Check
             if primal_residual < self.tol and dual_residual < self.tol:
-                logger.info("PnP-ADMM %d. iterasyonda yakınsadı.", k+1)
+                logger.info("PnP-ADMM converged at iteration %d.", k+1)
                 break
                 
-            # Adaptif rho güncellemesi (İsteğe bağlı)
+            # Adaptive rho update (Optional)
             if self.adaptive_rho:
                 rho = self._rho_update(rho, primal_residual, dual_residual)
                 
         else:
-            logger.info("PnP-ADMM max iterasyona (%d) ulaştı (Yakınsama Tamamlanmadı).", self.max_iter)
+            logger.info("PnP-ADMM reached max iterations (%d) (Convergence Incomplete).", self.max_iter)
 
         return z
 
@@ -189,7 +189,7 @@ class PnPADMM:
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     
-    # Basit bir denoiser oluştur (Hareketli ortalama filtresi)
+    # Create a simple denoiser (Moving average filter)
     def simple_moving_average_denoiser(sig, window_size=5):
         return np.convolve(sig, np.ones(window_size)/window_size, mode='same')
         
@@ -198,7 +198,7 @@ if __name__ == "__main__":
     ideal = np.sin(x)
     noisy_signal = ideal + np.random.normal(0, 0.4, size=len(x))
     
-    # PnP-ADMM başlat
+    # Initialize PnP-ADMM
     admm = PnPADMM(
         denoiser=simple_moving_average_denoiser,
         rho=1.5,
@@ -211,11 +211,11 @@ if __name__ == "__main__":
     plt.figure(figsize=(12, 4))
     
     plt.subplot(1, 2, 1)
-    plt.plot(ideal, 'k--', label="Orijinal")
-    plt.plot(noisy_signal, 'r-', alpha=0.5, label="Gürültülü")
+    plt.plot(ideal, 'k--', label="Original")
+    plt.plot(noisy_signal, 'r-', alpha=0.5, label="Noisy")
     plt.plot(optimized_signal, 'g-', linewidth=2, label="PnP-ADMM")
     plt.legend()
-    plt.title("PnP-ADMM Gerçek Zamanlı Davranış")
+    plt.title("PnP-ADMM Real-time Behavior")
     
     plt.subplot(1, 2, 2)
     plt.plot(admm.history_["primal_res"], label="Primal Residual")

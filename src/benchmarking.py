@@ -1,12 +1,12 @@
 """
-Modül 6: Kıyaslama ve Çıktı Üretimi (Benchmarking & Output)
+Module 6: Benchmarking & Output Generation
 ===========================================================
-Geliştirilen Quantum-Inspired (SCSA + PnP-ADMM) filtrelerin 
-klasik filtrelerle (örn. Savitzky-Golay) kantitatif kıyaslamasını
-yapar. Sinyali (clean) diske dışa aktarır (.npy / .txt).
+Performs quantitative comparisons between classical baseline filters 
+(e.g., Savitzky-Golay) and the Quantum-Inspired (SCSA + PnP-ADMM) engines 
+developed herein. Finally, exports the clean signal array to disk (.npy / .txt).
 
-Yazar: DeepTech Pipeline
-Tarih: 2026
+Author: FizyGame
+Date: 2026
 """
 
 from __future__ import annotations
@@ -20,31 +20,31 @@ from scipy.signal import savgol_filter
 import matplotlib
 import matplotlib.pyplot as plt
 
-# GUI yalıtımı (Headless CI/CD testleri için)
+# GUI Isolation (For Headless CI/CD tests)
 matplotlib.use("Agg")
 
 logger = logging.getLogger("benchmarking")
 
 def compute_snr(signal: np.ndarray, ground_truth: np.ndarray) -> float:
     """
-    Sinyal-Gürültü Oranını (SNR) Desibel (dB) cinsinden hesaplar.
+    Calculates the Signal-to-Noise Ratio (SNR) in Decibels (dB).
     
     SNR = 10 * log10( P_signal / P_noise )
-    Daha yüksek SNR, sinyalin ground truth'a daha yakın olduğunu gösterir.
+    A higher SNR means the signal conforms more closely to the physical ground truth.
     
     Args:
-        signal (np.ndarray): Değerlendirilecek / Filtrelenmiş sinyal.
-        ground_truth (np.ndarray): Hatasız referans (True) sinyal.
+        signal (np.ndarray): Evaluated / Filtered signal.
+        ground_truth (np.ndarray): Error-free reference (True) signal.
         
     Returns:
-        float: dB cinsinden SNR skoru.
+        float: SNR score in dB.
     """
-    assert signal.shape == ground_truth.shape, "Sinyal boyutları eşit olmalıdır."
+    assert signal.shape == ground_truth.shape, "Signal dimensions must match."
     
-    # Sinyal Gücü (Power of Signal)
+    # Power of Signal
     p_signal = np.mean(ground_truth ** 2)
     
-    # Gürültü Gücü (Mean Squared Error)
+    # Noise Power (Mean Squared Error against ground truth)
     noise = signal - ground_truth
     p_noise = np.mean(noise ** 2)
     
@@ -56,16 +56,16 @@ def compute_snr(signal: np.ndarray, ground_truth: np.ndarray) -> float:
 
 def savitzky_golay_baseline(signal: np.ndarray, window_length: int = 11, polyorder: int = 3) -> np.ndarray:
     """
-    Savitzky-Golay filtresini klasik bir referans (Baseline) olarak uygular.
-    Standart biyoinformatik ardışık veri düzeltme/yumuşatma algoritmasıdır.
+    Utilizes a Savitzky-Golay filter as a classical baseline reference.
+    This acts as a standard bioinformatics smoothing algorithm.
     
     Args:
-        signal (np.ndarray): Gürültülü 1D sinyal.
-        window_length (int): Filtre pencere boyutu (tek sayı, sinyalden küçük olmalı).
-        polyorder (int): Polinom derecesi.
+        signal (np.ndarray): 1D Noisy signal array.
+        window_length (int): Filter window size (must be an odd integer, less than signal len).
+        polyorder (int): The polynomial degree.
         
     Returns:
-        np.ndarray: Klasik filtreleme işlemi görmüş sinyal.
+        np.ndarray: Classically filtered output signal.
     """
     if len(signal) < window_length:
         window_length = len(signal) if len(signal) % 2 == 1 else len(signal) - 1
@@ -83,20 +83,20 @@ def plot_comparison(
     show: bool = False
 ) -> None:
     """
-    Ham (Noisy), Klasik (Savitzky-Golay) ve Kuantum (SCSA/ADMM) sinyallerinin
-    yan yana kıyaslanabileceği 3'lü matplotlib figürü oluşturur.
+    Generates a 3-axis matplotlib subplot comparing the Raw (Noisy), 
+    Classical (Savitzky-Golay), and Quantum (SCSA/ADMM) responses side by side.
     
     Args:
-        raw (np.ndarray): Orijinal gürültülü dizilim.
-        classic (np.ndarray): Klasik algoritma (Savitzky-Golay vs.) çıktısı.
-        quantum (np.ndarray): Quantum-inspired pipeline çıktısı.
-        save_path (Path|str|None): Figürün kaydedileceği yol.
-        show (bool): Ekranda gösterilsin mi? (GUI gerektirir)
+        raw (np.ndarray): Original noisy sequence.
+        classic (np.ndarray): Classical algorithm (Savitzky-Golay) output.
+        quantum (np.ndarray): Quantum-inspired pipeline output.
+        save_path (Path|str|None): Target figure filepath.
+        show (bool): Should display on screen? (Requires GUI backends)
     """
     fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True, sharey=True)
     
-    colors = ['#d62728', '#1f77b4', '#2ca02c'] # Kırmızı, Mavi, Yeşil
-    titles = ["Ham (Noisy) Sinyal", "Klasik Filtre (Savitzky-Golay)", "Kuantum Esintili Pipeline (SCSA + PnP-ADMM)"]
+    colors = ['#d62728', '#1f77b4', '#2ca02c'] # Red, Blue, Green
+    titles = ["Raw (Noisy) Signal", "Classical Filter (Savitzky-Golay)", "Quantum-Inspired Pipeline (SCSA + PnP-ADMM)"]
     signals = [raw, classic, quantum]
     
     for i, (sig, ax, c, t) in enumerate(zip(signals, axes, colors, titles)):
@@ -104,61 +104,61 @@ def plot_comparison(
         ax.set_title(t, fontweight='bold')
         ax.grid(True, alpha=0.3)
         if i == 2:
-            ax.set_xlabel("Zaman / Örnek (Sample)", fontweight='bold')
+            ax.set_xlabel("Time / Sample", fontweight='bold')
     
     plt.tight_layout()
     
     if save_path:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        logger.info(f"Kıyaslama grafiği kaydedildi: {save_path}")
+        logger.info(f"Comparison graph stored at: {save_path}")
         
     if show:
         try:
             plt.show()
         except Exception as e:
-            logger.warning(f"plot_comparison -> show() başarısız (Headless ortam?): {e}")
+            logger.warning(f"plot_comparison -> show() failed (Headless environment?): {e}")
     else:
         plt.close(fig)
 
 def export_npy(signal: np.ndarray, path: Union[str, Path]) -> None:
     """
-    Filtrelenmiş numpy dizisini ikili (.npy) formatında diske kaydeder.
+    Discharges the filtered numpy sequence as a binary (.npy) store structure.
     
     Args:
-        signal (np.ndarray): Kaydedilecek 1D dizi.
-        path (Path|str): Hedef dosya yolu (.npy uzantılı).
+        signal (np.ndarray): The processed 1D signal.
+        path (Path|str): Target system destination path (.npy appended).
     """
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Güvenlik için astype(float32) ile boyut optimize edilir
+    # Enforces size optimization mapping against float32 architectures 
     np.save(str(out_path), signal.astype(np.float32))
-    logger.info(f".npy olarak kaydedildi: {out_path} ({signal.nbytes / 1024:.2f} KB)")
+    logger.info(f"Saved binary .npy: {out_path} ({signal.nbytes / 1024:.2f} KB)")
 
 def export_fallback(signal: np.ndarray, path: Union[str, Path]) -> None:
     """
-    .npy okuyamayan eski sistemler için raw ASCII Text (.txt)
-    veya CSV tabanlı tek sütunluk geri dönüş (fallback) aktarımı.
+    Fall-back raw ASCII Text (.txt) or CSV single-column dump designed to load easily 
+    in legacy ecosystems incapable of mounting Python's specific .npy protocol.
     
     Args:
-        signal (np.ndarray): Kaydedilecek 1D dizi.
-        path (Path|str): Hedef dosya yolu (.txt veya .csv uzantılı).
+        signal (np.ndarray): Output target sequence array.
+        path (Path|str): Fall-back plain-text layout (.txt or .csv extending route).
     """
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     
     np.savetxt(str(out_path), signal, fmt='%.6f', delimiter=',', header='Signal_pA')
-    logger.info(f"Fallback metin dosyası kaydedildi: {out_path}")
+    logger.info(f"Fallback plain-text file registered: {out_path}")
 
-# Hızlı CLI Modülü Testi
+# Rapid CLI Component Inspection Boot
 if __name__ == "__main__":
     np.random.seed(42)
     t = np.linspace(0, 10, 500)
     true_sig = np.sin(t)
     noisy = true_sig + np.random.normal(0, 0.3, len(t))
     
-    # Sahte bir "quantum" filtresi çıktısı
+    # Distorted fake 'quantum' test response block
     fake_quant = true_sig + np.random.normal(0, 0.05, len(t))
     
     sg_baseline = savitzky_golay_baseline(noisy)
@@ -167,12 +167,12 @@ if __name__ == "__main__":
     snr_sg = compute_snr(sg_baseline, true_sig)
     snr_quant = compute_snr(fake_quant, true_sig)
     
-    print(f"Ham Sinyal SNR: {snr_noisy:.2f} dB")
-    print(f"Klasik SG SNR : {snr_sg:.2f} dB")
-    print(f"Kuantum SNR   : {snr_quant:.2f} dB")
+    print(f"Raw Signal SNR: {snr_noisy:.2f} dB")
+    print(f"Classical SG SNR : {snr_sg:.2f} dB")
+    print(f"Quantum SNR   : {snr_quant:.2f} dB")
     
     output_dir = Path("outputs")
     plot_comparison(noisy, sg_baseline, fake_quant, save_path=output_dir / "test_comparison.png")
     export_npy(fake_quant, output_dir / "test_clean.npy")
     export_fallback(fake_quant, output_dir / "test_clean.txt")
-    print("Test tamamlandı.")
+    print("Mock inspection passed.")

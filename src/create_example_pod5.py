@@ -1,7 +1,7 @@
 """
-ONT Lambda Phage Simüle POD5 Dosyası Oluşturucu
-Modül 1 için gerçek POD5 verisine yerel alternatif.
-Çalıştırma: python src/create_example_pod5.py
+ONT Lambda Phage Simulated POD5 File Generator
+A local alternative to real POD5 data for Module 1.
+Run: python src/create_example_pod5.py
 """
 import pathlib
 import uuid
@@ -26,17 +26,16 @@ def create_example_pod5(
     seed: int = RANDOM_SEED,
 ) -> pathlib.Path:
     """
-    Gerçek ONT kalibrasyon parametreleriyle simüle edilmiş
-    bir POD5 dosyası oluşturur.
+    Creates a simulated POD5 file using realistic ONT calibration parameters.
 
     Args:
-        output_path: Çıktı POD5 yolu.
-        n_reads: Oluşturulacak read sayısı.
-        n_samples: Her read için örnek sayısı.
-        seed: Rastgelelik tohumu.
+        output_path: Output POD5 path.
+        n_reads: Number of reads to generate.
+        n_samples: Number of samples per read.
+        seed: Random seed.
 
     Returns:
-        Oluşturulan POD5 dosyasının yolu.
+        The path to the generated POD5 file.
     """
     rng = np.random.default_rng(seed)
     output_path = pathlib.Path(output_path)
@@ -44,7 +43,7 @@ def create_example_pod5(
     if output_path.exists():
         output_path.unlink()
 
-    # ---- RunInfo (tek bir flowcell koşusu) ----
+    # ---- RunInfo (A single flowcell run) ----
     run_info = RunInfo(
         acquisition_id=str(uuid.UUID(int=seed)),
         acquisition_start_time=datetime.datetime(2024, 1, 1, 0, 0, 0),
@@ -58,7 +57,7 @@ def create_example_pod5(
         protocol_run_id=str(uuid.UUID(int=seed + 1)),
         protocol_start_time=datetime.datetime(2024, 1, 1, 0, 0, 0),
         sample_id="lambda_phage_R941_2024",
-        sample_rate=4000,           # 4 kHz — standart ONT örnekleme hızı
+        sample_rate=4000,           # 4 kHz — standard ONT sampling rate
         sequencing_kit="SQK-LSK114",
         sequencer_position="MN00000",
         sequencer_position_type="MN",
@@ -68,18 +67,18 @@ def create_example_pod5(
         tracking_id={},
     )
 
-    # Kalibrasyon parametreleri (gerçekçi ONT değerleri)
+    # Calibration parameters (realistic ONT values)
     OFFSET  = -200.0   # pA offset
-    SCALE   = 0.01     # pA/ADC birimi
+    SCALE   = 0.01     # pA/ADC unit
 
     reads = []
     for i in range(n_reads):
-        # Kademeli nanopore sinyali simülasyonu
+        # Stepped nanopore signal simulation
         levels = rng.choice([60., 70., 80., 90., 100., 110.], size=n_samples)
         noise  = rng.normal(0., 5.0, size=n_samples)
         signal_pa = (levels + noise).astype(np.float32)
 
-        # pA → ADC dönüşümü
+        # pA → ADC conversion
         signal_adc = ((signal_pa - OFFSET) / SCALE).astype(np.int16)
 
         reads.append(Read(
@@ -97,8 +96,8 @@ def create_example_pod5(
             signal=signal_adc,
         ))
 
-    # pod5 C++ kütüphanesi Windows'ta Türkçe karakterli ('ü') yollarda hata veriyor.
-    # Bu yüzden ASCII garantili geçici bir dizinde dosyayı oluşturup sonra hedefe taşıyoruz.
+    # The pod5 C++ library on Windows throws errors for paths with Unicode characters.
+    # Therefore, we generate the file in an ASCII-safe temporary directory and move it.
     temp_dir = pathlib.Path(tempfile.gettempdir())
     temp_pod5 = temp_dir / f"temp_{uuid.uuid4().hex[:8]}.pod5"
 
@@ -106,19 +105,19 @@ def create_example_pod5(
         with pod5.Writer(str(temp_pod5)) as writer:
             writer.add_reads(reads)
         
-        # Geçici dosyayı asıl hedefe taşı (shutil Unicode yolları sorunsuz destekler)
+        # Move the temporary file to the final destination (shutil handles Unicode paths fine)
         shutil.move(str(temp_pod5), str(output_path))
     finally:
         if temp_pod5.exists():
             temp_pod5.unlink(missing_ok=True)
 
-    print(f"POD5 oluşturuldu: {output_path} | {output_path.stat().st_size:,} bytes | {n_reads} reads")
+    print(f"POD5 created: {output_path} | {output_path.stat().st_size:,} bytes | {n_reads} reads")
     return output_path
 
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Lambda Phage simüle POD5 oluşturucu")
+    parser = argparse.ArgumentParser(description="Lambda Phage Simulated POD5 Generator")
     parser.add_argument("--output", default=str(OUTPUT_PATH))
     parser.add_argument("--n-reads", type=int, default=N_READS)
     parser.add_argument("--n-samples", type=int, default=N_SAMPLES)
@@ -131,4 +130,4 @@ if __name__ == "__main__":
         n_samples=args.n_samples,
         seed=args.seed,
     )
-    print(f"Tamamlandı: {path}")
+    print(f"Completed: {path}")

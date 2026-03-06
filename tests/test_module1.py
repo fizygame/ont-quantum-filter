@@ -1,12 +1,11 @@
 """
-Modül 1 Test Dosyası — Veri Çekme ve Ön İşleme
+Module 1 Test File — Data Ingestion & Preprocessing
 ===============================================
-pytest ile çalıştırın:
+Run with pytest:
     cd c:\\Users\\nuri_\\OneDrive\\Masaüstü\\DNA
     pytest tests/test_module1.py -v
 
-Tüm testler gerçek ağ bağlantısı gerektirmez;
-sentetik sinyal üreteci ile çevrimdışı çalışır.
+All tests work offline using the synthetic signal generator without requiring a real network connection.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ from unittest.mock import patch, MagicMock
 import numpy as np
 import pytest
 
-# Proje kökünü Python yoluna ekle
+# Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from data_ingestion import (
@@ -33,7 +32,7 @@ from data_ingestion import (
 
 
 # ---------------------------------------------------------------------------
-# Sabitler
+# Constants
 # ---------------------------------------------------------------------------
 SAMPLE_SIZE = 10_000
 
@@ -44,126 +43,126 @@ SAMPLE_SIZE = 10_000
 
 @pytest.fixture(scope="module")
 def synthetic_signal() -> np.ndarray:
-    """Modül genelinde yeniden kullanılacak sentetik ONT sinyali."""
+    """Synthetic ONT signal to be reused across the module."""
     return generate_synthetic_nanopore_signal(n_samples=SAMPLE_SIZE, seed=RANDOM_SEED)
 
 
 @pytest.fixture(scope="module")
 def normalized_signal(synthetic_signal: np.ndarray) -> np.ndarray:
-    """Z-score normalize edilmiş sinyal."""
+    """Z-score normalized signal."""
     return zscore_normalize(synthetic_signal)
 
 
 # ---------------------------------------------------------------------------
-# 1. Sentetik Sinyal Üretimi Testleri
+# 1. Synthetic Signal Generator Tests
 # ---------------------------------------------------------------------------
 
 class TestSyntheticSignal:
-    """generate_synthetic_nanopore_signal fonksiyonunu doğrular."""
+    """Validates the generate_synthetic_nanopore_signal function."""
 
     def test_output_is_1d_numpy_array(self, synthetic_signal: np.ndarray) -> None:
-        """Çıktı 1D numpy dizisi olmalı."""
-        assert isinstance(synthetic_signal, np.ndarray), "numpy.ndarray bekleniyor"
-        assert synthetic_signal.ndim == 1, f"1D bekleniyor, {synthetic_signal.ndim}D alındı"
+        """The output must be a 1D numpy array."""
+        assert isinstance(synthetic_signal, np.ndarray), "Expected numpy.ndarray"
+        assert synthetic_signal.ndim == 1, f"Expected 1D, got {synthetic_signal.ndim}D"
 
     def test_output_shape(self, synthetic_signal: np.ndarray) -> None:
-        """İstenen örnek sayısı üretilmeli."""
+        """The requested number of samples must be generated."""
         assert synthetic_signal.shape == (SAMPLE_SIZE,), (
-            f"Beklenen shape: ({SAMPLE_SIZE},), alınan: {synthetic_signal.shape}"
+            f"Expected shape: ({SAMPLE_SIZE},), got: {synthetic_signal.shape}"
         )
 
     def test_output_dtype_is_float64(self, synthetic_signal: np.ndarray) -> None:
-        """Dtype float64 olmalı."""
+        """Dtype must be float64."""
         assert synthetic_signal.dtype == np.float64, (
-            f"dtype=float64 bekleniyor, alınan={synthetic_signal.dtype}"
+            f"Expected dtype=float64, got={synthetic_signal.dtype}"
         )
 
     def test_signal_in_realistic_pa_range(self, synthetic_signal: np.ndarray) -> None:
-        """Sinyal nanopore için gerçekçi pikoamper aralığında olmalı (~40–200 pA)."""
-        assert synthetic_signal.min() > 20.0, "Alt sınır 20 pA'nın üzerinde olmalı"
-        assert synthetic_signal.max() < 250.0, "Üst sınır 250 pA'nın altında olmalı"
+        """The signal must be within a realistic picoampere range for nanopores (~40–200 pA)."""
+        assert synthetic_signal.min() > 20.0, "Lower bound should be above 20 pA"
+        assert synthetic_signal.max() < 250.0, "Upper bound should be below 250 pA"
 
     def test_reproducibility_with_seed(self) -> None:
-        """Aynı seed ile üretilen sinyaller özdeş olmalı."""
+        """Signals generated with the same seed must be identical."""
         s1 = generate_synthetic_nanopore_signal(n_samples=1000, seed=42)
         s2 = generate_synthetic_nanopore_signal(n_samples=1000, seed=42)
-        np.testing.assert_array_equal(s1, s2, err_msg="Seed ile tekrarlanabilirlik başarısız")
+        np.testing.assert_array_equal(s1, s2, err_msg="Seed reproducibility failed")
 
     def test_different_seeds_produce_different_signals(self) -> None:
-        """Farklı seed'ler farklı sinyal üretmeli."""
+        """Different seeds must generate different signals."""
         s1 = generate_synthetic_nanopore_signal(n_samples=1000, seed=0)
         s2 = generate_synthetic_nanopore_signal(n_samples=1000, seed=99)
-        assert not np.array_equal(s1, s2), "Farklı seed'ler aynı sinyali üretmemeli"
+        assert not np.array_equal(s1, s2), "Different seeds should not produce identical signals"
 
 
 # ---------------------------------------------------------------------------
-# 2. Z-Score Normalizasyon Testleri
+# 2. Z-Score Normalization Tests
 # ---------------------------------------------------------------------------
 
 class TestZscoreNormalize:
-    """zscore_normalize fonksiyonunu matematiksel olarak doğrular."""
+    """Mathematically validates the zscore_normalize function."""
 
     def test_mean_is_zero(self, normalized_signal: np.ndarray) -> None:
-        """Normalize sinyalin ortalaması 0'a yakın olmalı (< 1e-5)."""
+        """The mean of the normalized signal must be close to 0 (< 1e-5)."""
         mean_val = abs(normalized_signal.mean())
-        assert mean_val < 1e-5, f"Ortalama 0'a yakın olmalı, alınan: {mean_val:.2e}"
+        assert mean_val < 1e-5, f"Mean should be near 0, got: {mean_val:.2e}"
 
     def test_std_is_one(self, normalized_signal: np.ndarray) -> None:
-        """Normalize sinyalin standart sapması 1'e yakın olmalı (< 1e-5)."""
+        """The standard deviation of the normalized signal must be close to 1 (< 1e-5)."""
         std_val = abs(normalized_signal.std() - 1.0)
-        assert std_val < 1e-5, f"Standart sapma ≈ 1 olmalı, sapma: {std_val:.2e}"
+        assert std_val < 1e-5, f"Standard deviation should be ≈ 1, deviation: {std_val:.2e}"
 
     def test_shape_preserved(
         self, synthetic_signal: np.ndarray, normalized_signal: np.ndarray
     ) -> None:
-        """Normalizasyon sonrası shape değişmemeli."""
+        """The shape must not change after normalization."""
         assert synthetic_signal.shape == normalized_signal.shape, (
-            f"Shape değişti: {synthetic_signal.shape} → {normalized_signal.shape}"
+            f"Shape changed: {synthetic_signal.shape} → {normalized_signal.shape}"
         )
 
     def test_dtype_is_float64(self, normalized_signal: np.ndarray) -> None:
-        """Çıktı dtype float64 olmalı."""
+        """Output dtype must be float64."""
         assert normalized_signal.dtype == np.float64
 
     def test_raises_on_non_1d_input(self) -> None:
-        """2D dizi verilince ValueError fırlatmalı."""
+        """It should raise a ValueError when a 2D array is provided."""
         with pytest.raises(ValueError, match="1D"):
             zscore_normalize(np.random.randn(10, 10))
 
     def test_constant_signal_does_not_divide_by_zero(self) -> None:
-        """Sabit sinyalde (std=0) sıfıra bölme hatası olmamalı."""
+        """No divide-by-zero error should occur for a constant signal (std=0)."""
         constant = np.ones(100) * 75.0
         result = zscore_normalize(constant)
-        assert np.all(np.isfinite(result)), "Sabit sinyal için sonuç sonlu olmalı"
+        assert np.all(np.isfinite(result)), "Result must be finite for a constant signal"
 
     def test_output_has_no_nan_or_inf(self, normalized_signal: np.ndarray) -> None:
-        """Çıktıda NaN veya Inf olmamalı."""
-        assert np.all(np.isfinite(normalized_signal)), "NaN veya Inf değerler var"
+        """There should be no NaN or Inf in the output."""
+        assert np.all(np.isfinite(normalized_signal)), "Values contain NaN or Inf"
 
     def test_normalization_is_invertible(self, synthetic_signal: np.ndarray) -> None:
-        """Normalizasyon tersine çevrilebilir olmalı (mu ve sigma korunarak)."""
+        """Normalization must be invertible (preserving mu and sigma)."""
         mu = synthetic_signal.mean()
         sigma = synthetic_signal.std()
         normed = zscore_normalize(synthetic_signal)
-        # Ters dönüşüm: x = z * sigma + mu
+        # Inverse transform: x = z * sigma + mu
         reconstructed = normed * sigma + mu
         np.testing.assert_allclose(
             reconstructed, synthetic_signal, rtol=1e-5, atol=1e-5,
-            err_msg="Normalizasyon tersine çevrilemiyor"
+            err_msg="Normalization is not invertible"
         )
 
 
 # ---------------------------------------------------------------------------
-# 3. İndirme Mekanizması Testleri (Mock ile)
+# 3. Download Mechanism Tests (with Mock)
 # ---------------------------------------------------------------------------
 
 class TestDownloadOntData:
-    """download_ont_data retry mekanizmasını mock ile doğrular."""
+    """Validates the download_ont_data retry mechanism using mock."""
 
     def test_skips_download_if_file_exists(self, tmp_path: Path) -> None:
-        """Dosya zaten varsa indirme atlanmalı (requests çağrılmamalı)."""
+        """Download should be skipped if the file exists (requests shouldn't be called)."""
         existing_file = tmp_path / "test.pod5"
-        existing_file.write_bytes(b"mock pod5 data" * 100)  # Gerçekçi boyut
+        existing_file.write_bytes(b"mock pod5 data" * 100)  # Realistic size
 
         with patch("data_ingestion.requests.get") as mock_get:
             result = download_ont_data("http://fake.url", existing_file)
@@ -172,13 +171,13 @@ class TestDownloadOntData:
         assert result == existing_file
 
     def test_raises_runtime_error_after_all_retries_fail(self, tmp_path: Path) -> None:
-        """Tüm retry denemeleri başarısız olursa RuntimeError fırlatmalı."""
+        """It should raise RuntimeError if all retry attempts fail."""
         import requests as req_lib
 
         dest = tmp_path / "fail.pod5"
 
         with patch("data_ingestion.requests.get") as mock_get:
-            mock_get.side_effect = req_lib.RequestException("Bağlantı hatası")
+            mock_get.side_effect = req_lib.RequestException("Connection error")
             with pytest.raises(RuntimeError):
                 download_ont_data(
                     "http://invalid.url",
@@ -188,13 +187,13 @@ class TestDownloadOntData:
                 )
 
     def test_retry_count_is_respected(self, tmp_path: Path) -> None:
-        """requests.get tam olarak retries kadar çağrılmalı."""
+        """requests.get should be called exactly 'retries' times."""
         import requests as req_lib
 
         dest = tmp_path / "retry_test.pod5"
 
         with patch("data_ingestion.requests.get") as mock_get:
-            mock_get.side_effect = req_lib.RequestException("Sunucu hatası")
+            mock_get.side_effect = req_lib.RequestException("Server error")
             with pytest.raises(RuntimeError):
                 download_ont_data(
                     "http://retry.test",
@@ -203,48 +202,48 @@ class TestDownloadOntData:
                     retry_delay=0.01,
                     fallback_url=None,
                 )
-            # Ana URL için 3 deneme
+            # 3 attempts for the primary URL
             assert mock_get.call_count == 3, (
-                f"Beklenen 3 deneme, gerçekleşen: {mock_get.call_count}"
+                f"Expected 3 attempts, got: {mock_get.call_count}"
             )
 
     def test_creates_parent_directory(self, tmp_path: Path) -> None:
-        """Hedef dizin yoksa otomatik oluşturulmalı."""
+        """Parent directory should be automatically created if missing."""
         import requests as req_lib
         nested_dest = tmp_path / "a" / "b" / "c" / "test.pod5"
 
         with patch("data_ingestion.requests.get") as mock_get:
-            mock_get.side_effect = req_lib.RequestException("Hata")
+            mock_get.side_effect = req_lib.RequestException("Error")
             with pytest.raises(RuntimeError):
                 download_ont_data("http://x.url", nested_dest, retries=1, retry_delay=0.01)
 
-        assert nested_dest.parent.exists(), "Üst dizin oluşturulmalıydı"
+        assert nested_dest.parent.exists(), "Parent directory should have been created"
 
 
 # ---------------------------------------------------------------------------
-# 4. Görselleştirme Testleri
+# 4. Visualization Tests
 # ---------------------------------------------------------------------------
 
 class TestPlotSignal:
-    """plot_signal fonksiyonunun hatasız çalıştığını doğrular."""
+    """Validates that the plot_signal function works without errors."""
 
     def test_plot_runs_without_error(self, synthetic_signal: np.ndarray, tmp_path: Path) -> None:
-        """plot_signal hata fırlatmamalı ve dosyayı kaydetmeli."""
+        """plot_signal should not raise an error and must save the file."""
         save_path = tmp_path / "test_plot.png"
         plot_signal(synthetic_signal, title="Test", save_path=save_path, show=False)
-        assert save_path.exists(), "Grafik dosyası oluşturulmalıydı"
-        assert save_path.stat().st_size > 1000, "Grafik dosyası çok küçük"
+        assert save_path.exists(), "Plot file should have been generated"
+        assert save_path.stat().st_size > 1000, "Plot file is too small"
 
     def test_plot_works_without_save_path(self, synthetic_signal: np.ndarray) -> None:
-        """save_path verilmese de hata fırlatmamalı."""
+        """It should not raise an error even if save_path is omitted."""
         plot_signal(synthetic_signal, title="No Save Test", show=False)
 
     def test_plot_with_sampling_rate(self, synthetic_signal: np.ndarray, tmp_path: Path) -> None:
-        """sampling_rate_hz parametresiyle zaman eksenli grafik çalışmalı."""
+        """A time-axis plot should work with the sampling_rate_hz parameter."""
         save_path = tmp_path / "test_time_axis.png"
         plot_signal(
             synthetic_signal,
-            title="Zaman Eksenli",
+            title="Time Axis",
             sampling_rate_hz=4000.0,
             save_path=save_path,
             show=False,
@@ -253,18 +252,18 @@ class TestPlotSignal:
 
 
 # ---------------------------------------------------------------------------
-# 5. Entegrasyon Testi
+# 5. Integration Test
 # ---------------------------------------------------------------------------
 
 class TestIntegration:
-    """Tüm Modül 1 adımlarının uçtan uca çalıştığını doğrular."""
+    """Validates that all Module 1 steps work end-to-end."""
 
     def test_full_pipeline_synthetic(self, tmp_path: Path) -> None:
         """
-        Sentetik modda tam pipeline çalışmalı:
-        üret → normalize → kaydet → yükle → doğrula
+        The full pipeline should work in synthetic mode:
+        generate → normalize → save → load → verify
         """
-        # 1. Üret
+        # 1. Generate
         raw = generate_synthetic_nanopore_signal(n_samples=5000, seed=RANDOM_SEED)
         assert raw.shape == (5000,)
 
@@ -273,13 +272,13 @@ class TestIntegration:
         assert abs(normed.mean()) < 1e-5
         assert abs(normed.std() - 1.0) < 1e-5
 
-        # 3. Görselleştir
+        # 3. Visualize
         plot_path = tmp_path / "integration_plot.png"
         plot_signal(normed, title="Integration Test", save_path=plot_path, show=False)
         assert plot_path.exists()
 
-        # 4. Kaydet / Yükle
+        # 4. Save / Load
         npy_path = tmp_path / "test_signal.npy"
         np.save(npy_path, normed)
         loaded = np.load(npy_path)
-        np.testing.assert_array_equal(normed, loaded, err_msg=".npy kayıt/yükleme başarısız")
+        np.testing.assert_array_equal(normed, loaded, err_msg=".npy save/load failed")

@@ -1,18 +1,18 @@
 """
-Modül 1: Veri Çekme ve Ön İşleme (Data Ingestion & Preprocessing)
+Module 1: Data Ingestion & Preprocessing
 ==================================================================
-Oxford Nanopore (ONT) Lambda Phage açık veri setinden ham iyonik akım
-sinyallerini indirir, POD5 formatında okur, Z-score normalize eder ve
-görselleştirir.
+Downloads raw ionic current signals from the Oxford Nanopore (ONT) 
+Lambda Phage open dataset, reads them in POD5 format, applies Z-score 
+normalization, and visualizes them.
 
-Veri Kaynağı:
+Data Source:
     ONT Open Datasets — Lambda phage control run (POD5 format)
     https://github.com/nanoporetech/ont-open-datasets
     Direct S3: https://s3.amazonaws.com/nanopore-human-wgs/rna/referenceSamples/
 
-Kütüphaneler: numpy, scipy, pod5, matplotlib, requests
-Yazar: DeepTech Pipeline
-Tarih: 2026
+Libraries: numpy, scipy, pod5, matplotlib, requests
+Author: FizyGame
+Date: 2026
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 import matplotlib
-matplotlib.use("Agg")  # Headless ortamlar için — GUI backend gerektirmez
+matplotlib.use("Agg")  # For headless environments — no GUI backend required
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import requests
@@ -36,27 +36,27 @@ import shutil
 import uuid
 
 # ---------------------------------------------------------------------------
-# Sabitler
+# Constants
 # ---------------------------------------------------------------------------
 RANDOM_SEED: int = 42
 np.random.seed(RANDOM_SEED)
 
-# ONT / nanoporetech açık POD5 test verisi — doğrulanmış gerçek POD5 dosyaları
-# Kaynak: https://github.com/nanoporetech/pod5-file-format (Apache-2.0, Public)
+# ONT / nanoporetech open POD5 test data — verified real POD5 files
+# Source: https://github.com/nanoporetech/pod5-file-format (Apache-2.0, Public)
 ONT_LAMBDA_POD5_URL: str = (
     "https://raw.githubusercontent.com/nanoporetech/pod5-file-format/"
     "master/python/pod5/test_data/multi_fast5_zip.pod5"
 )
 
-# Yedek 1: Diğer resmi ONT test dosyası
+# Fallback 1: Another official ONT test file
 ONT_LAMBDA_FALLBACK_URL: str = (
     "https://raw.githubusercontent.com/nanoporetech/pod5-file-format/"
     "master/python/pod5/test_data/multi_reads.pod5"
 )
 
-# POD5 dosya imzası (magic bytes) — ilk 8 byte
-# Arrow IPC/Feather formatı: b'ARROW1\x00\x00' veya b'\x41\x52\x52\x4f\x57\x31\x00\x00'
-_POD5_MIN_FILE_SIZE_BYTES: int = 10_000  # Geçerli POD5 en az ~10 KB olmalı
+# POD5 file signatures (magic bytes) — first 8 bytes
+# Arrow IPC/Feather format: b'ARROW1\x00\x00' or b'\x41\x52\x52\x4f\x57\x31\x00\x00'
+_POD5_MIN_FILE_SIZE_BYTES: int = 10_000  # Valid POD5 should be at least ~10 KB
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,7 +66,7 @@ logger = logging.getLogger("data_ingestion")
 
 
 # ---------------------------------------------------------------------------
-# 1. Veri İndirme
+# 1. Data Downloading
 # ---------------------------------------------------------------------------
 
 def download_ont_data(
@@ -78,24 +78,24 @@ def download_ont_data(
     fallback_url: Optional[str] = None,
 ) -> Path:
     """
-    ONT açık veri setinden POD5 dosyasını indirir.
+    Downloads a POD5 file from the ONT open dataset.
 
-    Retry (yeniden deneme) mekanizması ile ağ kopmalarına karşı dayanıklıdır.
-    Dosya zaten mevcutsa yeniden indirmez.
+    Features a retry mechanism to handle network interruptions.
+    If the file already exists, the download is skipped.
 
     Args:
-        url (str): İndirilecek dosyanın URL'si.
-        dest_path (str | Path): Kaydedilecek yerel dosya yolu.
-        retries (int): Maksimum yeniden deneme sayısı. Varsayılan: 3.
-        retry_delay (float): Denemeler arası bekleme süresi (saniye).
-        chunk_size (int): Akış indirme için parça boyutu (bayt).
-        fallback_url (Optional[str]): Ana URL başarısız olursa kullanılacak yedek URL.
+        url (str): The URL of the file to download.
+        dest_path (str | Path): Local path to save the file.
+        retries (int): Maximum number of retries. Default: 3.
+        retry_delay (float): Wait time between attempts (seconds).
+        chunk_size (int): Chunk size for streaming download (bytes).
+        fallback_url (Optional[str]): Backup URL to use if the primary fails.
 
     Returns:
-        Path: İndirilen veya mevcut dosyanın yerel yolu.
+        Path: The local path of the downloaded or existing file.
 
     Raises:
-        RuntimeError: Tüm denemeler ve yedek başarısız olursa.
+        RuntimeError: If all attempts and the fallback URL fail.
 
     Example:
         >>> path = download_ont_data(ONT_LAMBDA_POD5_URL, "data/lambda.pod5")
@@ -104,7 +104,7 @@ def download_ont_data(
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
     if dest_path.exists() and dest_path.stat().st_size > 0:
-        logger.info("Dosya zaten mevcut, indirme atlandı: %s", dest_path)
+        logger.info("File already exists, skipping download: %s", dest_path)
         return dest_path
 
     urls_to_try = [url]
@@ -112,7 +112,7 @@ def download_ont_data(
         urls_to_try.append(fallback_url)
 
     for attempt_url in urls_to_try:
-        logger.info("İndirme deneniyor: %s", attempt_url)
+        logger.info("Attempting download: %s", attempt_url)
         for attempt in range(1, retries + 1):
             try:
                 response = requests.get(
@@ -123,11 +123,11 @@ def download_ont_data(
                 )
                 response.raise_for_status()
 
-                # Content-Type kontrolü — HTML/XML hata sayfası değilse indir
+                # Content-Type check — Only download if not an HTML/XML error page
                 content_type = response.headers.get("Content-Type", "")
                 if "html" in content_type or "xml" in content_type:
                     raise IOError(
-                        f"Sunucu HTML/XML döndürdü (POD5 değil): Content-Type={content_type}"
+                        f"Server returned HTML/XML (not POD5): Content-Type={content_type}"
                     )
 
                 total_size = int(response.headers.get("content-length", 0))
@@ -141,30 +141,30 @@ def download_ont_data(
 
                 if total_size > 0 and downloaded < total_size:
                     raise IOError(
-                        f"Eksik indirme: {downloaded}/{total_size} bayt"
+                        f"Incomplete download: {downloaded}/{total_size} bytes"
                     )
 
-                # Minimum boyut kontrolü — HTML hata sayfası mı?
+                # Minimum size check — Is it an HTML error page?
                 if downloaded < _POD5_MIN_FILE_SIZE_BYTES:
                     dest_path.unlink(missing_ok=True)
                     raise IOError(
-                        f"İndirilen dosya çok küçük ({downloaded} bayt < "
-                        f"{_POD5_MIN_FILE_SIZE_BYTES} bayt). "
-                        f"Muhtemelen geçersiz URL veya hata sayfası."
+                        f"Downloaded file is too small ({downloaded} bytes < "
+                        f"{_POD5_MIN_FILE_SIZE_BYTES} bytes). "
+                        f"Possibly an invalid URL or error page."
                     )
 
-                # POD5/Arrow imza kontrolü (ilk 4 byte: 'ARRO')
+                # POD5/Arrow signature check (first 4 bytes: 'ARRO')
                 with open(dest_path, "rb") as f_check:
                     magic = f_check.read(4)
                 if magic != b"ARRO" and magic != b"\x50\x4f\x44\x35":
                     dest_path.unlink(missing_ok=True)
                     raise IOError(
-                        f"Geçersiz POD5 imzası: {magic!r}. "
-                        f"Dosya POD5/Arrow formatında değil."
+                        f"Invalid POD5 signature: {magic!r}. "
+                        f"File is not in POD5/Arrow format."
                     )
 
                 logger.info(
-                    "İndirme tamamlandı (%.2f MB): %s",
+                    "Download complete (%.2f MB): %s",
                     downloaded / 1024 / 1024,
                     dest_path,
                 )
@@ -172,24 +172,24 @@ def download_ont_data(
 
             except (requests.RequestException, IOError) as exc:
                 logger.warning(
-                    "Deneme %d/%d başarısız [%s]: %s",
+                    "Attempt %d/%d failed [%s]: %s",
                     attempt, retries, attempt_url, exc,
                 )
                 if attempt < retries:
                     time.sleep(retry_delay * attempt)
                 else:
-                    logger.error("URL başarısız: %s", attempt_url)
+                    logger.error("URL failed: %s", attempt_url)
                     if dest_path.exists():
                         dest_path.unlink(missing_ok=True)
 
     raise RuntimeError(
-        f"Tüm URL denemeleri başarısız oldu. "
-        f"Lütfen interneti ve veri kaynaklarını kontrol edin."
+        f"All URL attempts failed. "
+        f"Please check your internet connection and data sources."
     )
 
 
 # ---------------------------------------------------------------------------
-# 2. POD5 Okuma
+# 2. POD5 Reading
 # ---------------------------------------------------------------------------
 
 def load_pod5_signal(
@@ -198,22 +198,22 @@ def load_pod5_signal(
     read_index: int = 0,
 ) -> Tuple[np.ndarray, str]:
     """
-    POD5 dosyasından ham iyonik akım sinyalini (pA) okur.
+    Reads the raw ionic current signal (pA) from a POD5 file.
 
     Args:
-        filepath (str | Path): POD5 dosyasının yolu.
-        read_id (Optional[str]): Belirli bir read UUID'si. None ise read_index kullanılır.
-        read_index (int): read_id verilmezse kullanılacak okuma indeksi. Varsayılan: 0.
+        filepath (str | Path): Path to the POD5 file.
+        read_id (Optional[str]): A specific read UUID. If None, read_index is used.
+        read_index (int): The read index to use if read_id is not provided. Default: 0.
 
     Returns:
         Tuple[np.ndarray, str]:
-            - signal (np.ndarray): pA cinsinden ham iyonik akım zaman serisi, shape=(N,).
-            - actual_read_id (str): Okunan read'in UUID'si.
+            - signal (np.ndarray): Raw ionic current time series in pA, shape=(N,).
+            - actual_read_id (str): The UUID of the read that was loaded.
 
     Raises:
-        FileNotFoundError: Dosya bulunamazsa.
-        ValueError: Belirtilen read_id dosyada yoksa.
-        IndexError: read_index dosyadaki read sayısını aşıyorsa.
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the specified read_id is not found in the file.
+        IndexError: If the read_index exceeds the number of reads in the file.
 
     Example:
         >>> signal, rid = load_pod5_signal("data/lambda.pod5", read_index=0)
@@ -221,12 +221,12 @@ def load_pod5_signal(
     """
     filepath = Path(filepath)
     if not filepath.exists():
-        raise FileNotFoundError(f"POD5 dosyası bulunamadı: {filepath}")
+        raise FileNotFoundError(f"POD5 file not found: {filepath}")
 
-    logger.info("POD5 dosyası açılıyor: %s", filepath)
+    logger.info("Opening POD5 file: %s", filepath)
 
     # Windows Unicode path bypass for pod5 C++ bindings
-    # If the path contains non-ascii characters (like 'Masaüstü'),
+    # If the path contains non-ascii characters,
     # we must copy it to an ASCII-only temp directory first.
     temp_path = None
     is_ascii = all(ord(c) < 128 for c in str(filepath.resolve()))
@@ -241,37 +241,37 @@ def load_pod5_signal(
     try:
         with pod5.Reader(actual_read_path) as reader:
             if read_id is not None:
-                # Belirli read_id ile arama
+                # Search by specific read_id
                 target_id = read_id
                 for read in reader.reads():
                     if str(read.read_id) == target_id:
                         signal = read.signal_pa.astype(np.float64)
                         assert signal.ndim == 1, (
-                            f"Sinyal 1D olmalı, fakat {signal.ndim}D alındı."
+                            f"Signal should be 1D, but received {signal.ndim}D."
                         )
                         logger.info(
-                            "Read yüklendi: %s, uzunluk=%d, dtype=%s",
+                            "Read loaded: %s, length=%d, dtype=%s",
                             target_id, len(signal), signal.dtype,
                         )
                         return signal, target_id
-                raise ValueError(f"read_id bulunamadı: {read_id}")
+                raise ValueError(f"read_id not found: {read_id}")
             else:
-                # İndeks ile erişim
+                # Access by index
                 reads = list(reader.reads())
                 if read_index >= len(reads):
                     raise IndexError(
-                        f"read_index={read_index} geçersiz, "
-                        f"dosyada {len(reads)} read var."
+                        f"read_index={read_index} is invalid, "
+                        f"the file has {len(reads)} reads."
                     )
                 read = reads[read_index]
                 signal = read.signal_pa.astype(np.float64)
                 actual_id = str(read.read_id)
 
                 assert signal.ndim == 1, (
-                    f"Sinyal 1D olmalı, fakat {signal.ndim}D alındı."
+                    f"Signal should be 1D, but received {signal.ndim}D."
                 )
                 logger.info(
-                    "Read #%d yüklendi: %s, uzunluk=%d samples",
+                    "Read #%d loaded: %s, length=%d samples",
                     read_index, actual_id, len(signal),
                 )
                 return signal, actual_id
@@ -285,7 +285,7 @@ def load_pod5_signal(
 
 
 # ---------------------------------------------------------------------------
-# 3. Z-Score Normalizasyonu
+# 3. Z-Score Normalization
 # ---------------------------------------------------------------------------
 
 def zscore_normalize(
@@ -293,19 +293,19 @@ def zscore_normalize(
     epsilon: float = 1e-10,
 ) -> np.ndarray:
     """
-    1D sinyale Z-score (standart skor) normalizasyonu uygular.
+    Applies Z-score (standard score) normalization to a 1D signal.
 
-    Formül: z = (x - μ) / (σ + ε)
+    Formula: z = (x - mean) / (std + epsilon)
 
     Args:
-        signal (np.ndarray): Ham iyonik akım sinyali, shape=(N,).
-        epsilon (float): Sıfıra bölünmeyi önlemek için küçük sabit.
+        signal (np.ndarray): Raw ionic current signal, shape=(N,).
+        epsilon (float): Small constant to avoid division by zero.
 
     Returns:
-        np.ndarray: Normalize edilmiş sinyal, shape=(N,), ortalama≈0, std≈1.
+        np.ndarray: Normalized signal, shape=(N,), mean≈0, std≈1.
 
     Raises:
-        ValueError: signal 1D değilse.
+        ValueError: If the signal is not 1D.
 
     Example:
         >>> normed = zscore_normalize(signal)
@@ -315,8 +315,8 @@ def zscore_normalize(
 
     if signal.ndim != 1:
         raise ValueError(
-            f"zscore_normalize yalnızca 1D dizilerle çalışır, "
-            f"fakat shape={signal.shape} alındı."
+            f"zscore_normalize only works with 1D arrays, "
+            f"but received shape={signal.shape}."
         )
 
     mu: float = signal.mean()
@@ -324,74 +324,74 @@ def zscore_normalize(
 
     normalized = (signal - mu) / (sigma + epsilon)
 
-    assert abs(normalized.mean()) < 1e-5, "Normalizasyon sonrası ortalama 0'a yakın olmalı."
+    assert abs(normalized.mean()) < 1e-5, "Mean should be close to 0 after normalization."
     logger.debug(
-        "Z-score normalizasyon: μ=%.4f, σ=%.4f → yeni μ=%.6f, σ=%.6f",
+        "Z-score normalization: mean=%.4f, std=%.4f → new mean=%.6f, new std=%.6f",
         mu, sigma, normalized.mean(), normalized.std(),
     )
     return normalized
 
 
 # ---------------------------------------------------------------------------
-# 4. Görselleştirme
+# 4. Visualization
 # ---------------------------------------------------------------------------
 
 def plot_signal(
     signal: np.ndarray,
-    title: str = "ONT Ham İyonik Akım Sinyali",
+    title: str = "ONT Raw Ionic Current Signal",
     sampling_rate_hz: Optional[float] = None,
     save_path: Optional[str | Path] = None,
     show: bool = True,
 ) -> None:
     """
-    1D ONT sinyalini matplotlib ile görselleştirir.
+    Visualizes the 1D ONT signal using matplotlib.
 
     Args:
-        signal (np.ndarray): Görüntülenecek sinyal, shape=(N,).
-        title (str): Grafik başlığı.
-        sampling_rate_hz (Optional[float]): Örnekleme frekansı (Hz). Verilirse
-            x ekseni zaman (ms) cinsinden gösterilir, aksi hâlde örnek indeksi.
-        save_path (Optional[str | Path]): Kaydedilecek dosya yolu (.png).
-        show (bool): plt.show() çağrılsın mı. Test ortamlarında False yapılabilir.
+        signal (np.ndarray): Signal to visualize, shape=(N,).
+        title (str): Plot title.
+        sampling_rate_hz (Optional[float]): Sampling frequency (Hz). If provided,
+            the x-axis is shown in time (ms), otherwise by sample index.
+        save_path (Optional[str | Path]): Path to save the file (.png).
+        show (bool): Whether to call plt.show(). Set to False in testing environments.
 
     Returns:
         None
 
     Example:
-        >>> plot_signal(normed_signal, "Lambda Phage — Normalize Sinyal", show=False)
+        >>> plot_signal(normed_signal, "Lambda Phage — Normalized Signal", show=False)
     """
     signal = np.asarray(signal, dtype=np.float64)
 
     fig = plt.figure(figsize=(14, 5), facecolor="#0d1117")
     ax = fig.add_subplot(111)
 
-    # Zaman ekseni
+    # Time axis
     if sampling_rate_hz is not None:
         x = np.arange(len(signal)) / sampling_rate_hz * 1000  # ms
-        xlabel = "Zaman (ms)"
+        xlabel = "Time (ms)"
     else:
         x = np.arange(len(signal))
-        xlabel = "Örnek İndeksi"
+        xlabel = "Sample Index"
 
-    # Sinyal çizimi
+    # Signal plotting
     ax.plot(x, signal, linewidth=0.6, color="#39d353", alpha=0.85)
     ax.fill_between(x, signal, alpha=0.12, color="#39d353")
 
-    # Stil
+    # Styling
     ax.set_facecolor("#0d1117")
     ax.set_title(title, color="white", fontsize=14, pad=12)
     ax.set_xlabel(xlabel, color="#8b949e", fontsize=11)
-    ax.set_ylabel("Sinyal Genliği (pA veya Z-score)", color="#8b949e", fontsize=11)
+    ax.set_ylabel("Signal Amplitude (pA or Z-score)", color="#8b949e", fontsize=11)
     ax.tick_params(colors="#8b949e")
     for spine in ax.spines.values():
         spine.set_edgecolor("#30363d")
     ax.grid(True, alpha=0.15, color="#30363d", linestyle="--")
 
-    # Annotasyon
+    # Annotation
     info_text = (
-        f"N={len(signal):,} örnek | "
-        f"μ={signal.mean():.3f} | "
-        f"σ={signal.std():.3f} | "
+        f"N={len(signal):,} samples | "
+        f"mean={signal.mean():.3f} | "
+        f"std={signal.std():.3f} | "
         f"min={signal.min():.3f} | "
         f"max={signal.max():.3f}"
     )
@@ -406,7 +406,7 @@ def plot_signal(
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, dpi=150, bbox_inches="tight", facecolor="#0d1117")
-        logger.info("Grafik kaydedildi: %s", save_path)
+        logger.info("Plot saved: %s", save_path)
 
     if show:
         plt.show()
@@ -415,7 +415,7 @@ def plot_signal(
 
 
 # ---------------------------------------------------------------------------
-# 5. Sentetik Test Sinyali Üreteci (POD5 yoksa)
+# 5. Synthetic Test Signal Generator (If POD5 is missing)
 # ---------------------------------------------------------------------------
 
 def generate_synthetic_nanopore_signal(
@@ -423,18 +423,18 @@ def generate_synthetic_nanopore_signal(
     seed: int = RANDOM_SEED,
 ) -> np.ndarray:
     """
-    Gerçekçi bir ONT (nanopore) sinyalini simüle eden sentetik veri üretir.
+    Generates synthetic data that simulates a realistic ONT (nanopore) signal.
 
-    Kademeleri (level) ve Poisson gürültüsünü gerçek nanopore verisiyle
-    benzer istatistiksel özelliklere sahip olacak şekilde modeller.
-    POD5 dosyasına erişilemeyen ortamlarda test/geliştirme için kullanılır.
+    Models states (levels) and Poisson noise to mirror the statistical properties
+    of real nanopore data. Useful for testing/development when POD5 files are
+    inaccessible.
 
     Args:
-        n_samples (int): Üretilecek örnek sayısı. Varsayılan: 50_000.
-        seed (int): Rastgelelik tohumu. Varsayılan: RANDOM_SEED (42).
+        n_samples (int): Number of samples to generate. Default: 50_000.
+        seed (int): Random seed. Default: RANDOM_SEED (42).
 
     Returns:
-        np.ndarray: Pikoamper (pA) cinsinden simüle edilmiş sinyal, shape=(n_samples,).
+        np.ndarray: Simulated signal in picoamperes (pA), shape=(n_samples,).
 
     Example:
         >>> signal = generate_synthetic_nanopore_signal(n_samples=10_000)
@@ -442,27 +442,27 @@ def generate_synthetic_nanopore_signal(
     """
     rng = np.random.default_rng(seed)
 
-    # Nanopore kılavuz kanalı bantları (pA cinsinden tipik düzeyler)
+    # Nanopore guide channel bands (typical levels in pA)
     levels = np.array([60.0, 75.0, 90.0, 105.0, 120.0, 85.0, 70.0, 95.0])
     dwell_times = rng.integers(200, 2000, size=len(levels))
 
-    # Kademeli sinyal oluştur
+    # Construct the step signal
     signal_parts = []
     for level, dwell in zip(levels, dwell_times):
         n = min(dwell, n_samples - sum(len(s) for s in signal_parts))
         if n <= 0:
             break
-        # Gaussian + Poisson gürültüsü
+        # Gaussian + Poisson noise
         segment = (
             level
-            + rng.normal(0, 3.0, size=n)       # Termal gürültü
-            + rng.poisson(lam=1.5, size=n)     # Sayısal/shot gürültüsü
+            + rng.normal(0, 3.0, size=n)       # Thermal noise
+            + rng.poisson(lam=1.5, size=n)     # Shot noise
         )
         signal_parts.append(segment)
 
     signal = np.concatenate(signal_parts)
 
-    # Hedef uzunluğa ulaşana kadar tekrar et
+    # Repeat until the target length is reached
     while len(signal) < n_samples:
         repeats = int(np.ceil(n_samples / len(signal)))
         base = np.tile(signal, repeats)
@@ -470,29 +470,29 @@ def generate_synthetic_nanopore_signal(
 
     signal = signal[:n_samples].astype(np.float64)
     logger.info(
-        "Sentetik sinyal üretildi: %d örnek, μ=%.2f pA, σ=%.2f pA",
+        "Synthetic signal generated: %d samples, mean=%.2f pA, std=%.2f pA",
         n_samples, signal.mean(), signal.std(),
     )
     return signal
 
 
 # ---------------------------------------------------------------------------
-# Yardımcı: Dosya MD5 doğrulama
+# Helper: File MD5 Verification
 # ---------------------------------------------------------------------------
 
 def verify_file_md5(filepath: str | Path, expected_md5: Optional[str] = None) -> str:
     """
-    Dosyanın MD5 özetini hesaplar ve isteğe bağlı olarak doğrular.
+    Calculates the MD5 digest of a file, verifying it if expected_md5 is provided.
 
     Args:
-        filepath (str | Path): Kontrol edilecek dosya.
-        expected_md5 (Optional[str]): Beklenen MD5 değeri. Verilirse eşleşme kontrol edilir.
+        filepath (str | Path): The file to check.
+        expected_md5 (Optional[str]): Expected MD5 value. If provided, checks for a match.
 
     Returns:
-        str: Dosyanın MD5 hex özeti.
+        str: MD5 hex digest of the file.
 
     Raises:
-        ValueError: MD5 eşleşmezse.
+        ValueError: If the MD5 does not match.
     """
     h = hashlib.md5()
     with open(filepath, "rb") as f:
@@ -501,41 +501,41 @@ def verify_file_md5(filepath: str | Path, expected_md5: Optional[str] = None) ->
     digest = h.hexdigest()
     if expected_md5 and digest != expected_md5:
         raise ValueError(
-            f"MD5 uyuşmazlığı: beklenen={expected_md5}, hesaplanan={digest}"
+            f"MD5 mismatch: expected={expected_md5}, calculated={digest}"
         )
     return digest
 
 
 # ---------------------------------------------------------------------------
-# CLI Çalıştırma
+# CLI Execution
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="ONT Lambda Phage veri indirme ve ön işleme"
+        description="ONT Lambda Phage data ingestion and preprocessing"
     )
     parser.add_argument(
         "--dest", default="data/lambda_phage.pod5",
-        help="İndirilecek dosyanın yerel yolu"
+        help="Local path to download the file to"
     )
     parser.add_argument(
         "--read-index", type=int, default=0,
-        help="Okunacak read'in indeksi"
+        help="Index of the read to load"
     )
     parser.add_argument(
         "--synthetic", action="store_true",
-        help="POD5 yerine sentetik sinyal kullan (test modu)"
+        help="Use synthetic signal instead of POD5 (test mode)"
     )
     parser.add_argument(
         "--plot-save", default="outputs/raw_signal.png",
-        help="Grafik kayıt yolu"
+        help="Path to save the plot"
     )
     args = parser.parse_args()
 
     if args.synthetic:
-        logger.info("Sentetik mod aktif.")
+        logger.info("Synthetic mode active.")
         raw_signal = generate_synthetic_nanopore_signal()
         read_uuid = "synthetic-lambda-phage"
     else:
@@ -552,26 +552,26 @@ if __name__ == "__main__":
     print(f"[MEAN pA ] {raw_signal.mean():.4f}")
     print(f"[STD  pA ] {raw_signal.std():.4f}")
 
-    # Ham sinyal grafiği
+    # Plot raw signal
     plot_signal(
         raw_signal,
-        title=f"Ham ONT Sinyali - {read_uuid[:12]}...",
+        title=f"Raw ONT Signal - {read_uuid[:12]}...",
         save_path=args.plot_save,
         show=False,
     )
 
-    # Z-score normalizasyon
+    # Z-score normalization
     norm_signal = zscore_normalize(raw_signal)
     print(f"\n[NORM mean] {norm_signal.mean():.6f}")
     print(f"[NORM std ] {norm_signal.std():.6f}")
 
     plot_signal(
         norm_signal,
-        title=f"Z-Score Normalize Sinyal - {read_uuid[:12]}...",
+        title=f"Z-Score Normalized Signal - {read_uuid[:12]}...",
         save_path=args.plot_save.replace("raw", "normalized"),
         show=False,
     )
 
-    # Normalize sinyali kaydet
+    # Save normalized signal
     np.save("outputs/normalized_signal.npy", norm_signal)
-    logger.info("Normalize sinyal kaydedildi: outputs/normalized_signal.npy")
+    logger.info("Normalized signal saved to: outputs/normalized_signal.npy")
